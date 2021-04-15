@@ -1,0 +1,165 @@
+<!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1250">
+
+<meta name="Author" content="Vaclav Dvorsky">
+
+<meta name="GENERATOR" content="Mozilla/4.75 [en] (X11; U; Linux 2.2.16-22 i686) [Netscape]">
+
+<meta name="KeyWords" content="Linux Samba SMB Primary Domain Controller PDC Windows NT">
+<meta name="Description" content="Linux Samba SMB Primary Domain Controller PDC Windows NT">
+
+<title>Jak zkrotit zlobivá okna?</title>
+<style type="text/css">
+
+<!--
+   BODY, TH, TD, TABLE  { font-family: arial CE, helvetica CE, verdana CE, arial, helvetica,    verdana, sans-serif; }
+   -->
+
+</style>
+</head>
+
+<body text="#000000" bgcolor="#FFFFFF" link="#990000" vlink="#666666" alink="#FF0000">
+<table BORDER=0 CELLSPACING=0 CELLPADDING=0 COLS=1 WIDTH="500" >
+
+<tr>
+<td>
+
+<b><i><font size=+3>Jak zkrotit zlobivá okna?</b></i></font>
+
+<font color="#663300">
+<font size=-1>
+
+<p align="justify">
+Pokud máte počítačovou síť postavenou na klientech Windows a server jim dělá Linux se Sambou, jste na tom stejně jako já. Jistě by jste rádi více experimentovali s Linuxem, ale problémy s okny Vás neustále ruší. V tomto článku si ukážeme, jak si zajistíme klid pro studium Linuxu.
+<br>
+<br>
+Znáte to: Právě ladíte Qmail, plné soustředění a v tom zazvoní telefon. Chvilku posloucháte a je Vám jasno; bude to chtít nainstalovat Javu. Takže vstanete ze židle, jdete ke stanici, odhlásíte uživatele, přihlásíte administrátora (mezitím zodpovíte asi 5 jiných uživatelských dotazů), nainstalujete JVM, vyčistíte temp, restartujete, necháte přihlásit uživatele a vyzkoušíte funkčnost. Když se vrátíte zpět k Linuxu, už jen těžko hledáte ztracené soustředění. Mezitím zazvoní další telefon a jste v háji.
+<br>
+<br>
+A tak přemýšlíte, jak by bylo krásné mít Windows pěkně všechny úplně stejné. Na všech stejné service packy, stejné verze JVM, stejné Internet Explorery atd. Jistě Vás nejdříve napadne použít programy na vzdálenou správu (AutoIt, netmeeting, VNC, PC Anywhere, Carbon Copy, Back Orifice), jenže to není úplně ono. Ne všechny jsou distribuovány jako otevřený software a mají i jiné (např. bezpečnostní) nevýhody. Chtělo by to elegantnější a jednodušší řešení.
+<br>
+Tady je jedno z možných.
+<br>
+<br>
+<b>Zavedení systému automatické správy</b>
+<br>
+Když se podíváte do souboru /etc/samba/smb.conf, najdete tam oddíl netlogon. Je to sdílený adresář na serveru, ve kterém hledají Windows login script pro přihlášení do domény. Jméno scriptu je uvedeno v části global (logon script = %U.bat) a je výhodné je mít pro všechny stanice stejné, třeba logon script = mount.cmd.
+<br>
+Tento script probíhá na straně Windows vždy jako první při přihlašování uživatele do domény a je nutné jej vytvořit v DOSu nebo ve Windows. To proto, že UN*X a Windows používají jiné konce řádků. Pomocí netlogon scriptu je výhodné připojovat uživatelům sdílené disky ze serveru. Dá se s ním ale dělat v podstatě cokoli, co je možné provést na příkazové řádce Windows. Má však jedno veliké omezení. Běží s právy uživatele, který se ke stanici přihlásil. To je šikovné, pokud chceme měnit něco v profilu uživatele (nabídku Start, plochu) nebo v registrech v oblasti \HKEY_CURRENT_USER, ovšem nainstalovat nový Internet Explorer při dobře nastavené bezpečnostní politice (netlogon\<a href="http://www.google.com/search?hl=en&as_qdr=all&q=netlogon+windows+config.pol&btnG=Google+Search&lr=lang_cs">NTconfig.pol</a>) se nám pomocí netlogon scriptu pravděpodobně  nepodaří.
+<br>
+<br>
+Potřebujeme tedy podobný script, který proběhne s právy administrátora. Proto si nejprve musíme takového uživatele založit. V našem příkladu jej pojmenujeme trinity; je to hezký název a obsahuje v sobě init.
+
+<pre>
+useradd -g 100 -s /bin/false -m -k /dev/null -c "start NT" trinity
+smbadduser trinity:trinity
+usermod -G adm trinity
+smbpasswd trinity
+</pre>
+
+<p align="justify">
+První příkaz založí uživatele trinity bez shellu, s prázdným home adresářem. Druhý přiřadí trinity mezi uživatele Samby. Třetí přidá uživatele trinity do skupiny adm, čímž se z něj stane Windows administrátor a čtvrtým příkazem nastavíme trinity heslo. Heslo zvolíme podle nejpřísnějších pravidel pro hesla, tedy hodně dlouhé a velmi komplikované. Heslo uživatele trinity by se později jen velmi těžko měnilo.
+<br>
+<br>
+Máme tedy uživatele s právy administrátora. Nyní si připravíme jednoduchý script, který budeme pod tímto uživatelem spouštět. Pojmenujeme ho např. start.bat a jeho obsahem může být prozatím jediná řádka:
+<pre>
+net time \\server /set /yes
+</pre><p align="justify">
+Nakonec je potřeba na stanicích Windows zajistit spouštění scriptu start.bat při přihlášení pod uživatelem trinity. To je asi nejnáročnější část, neboť musíme obejít všechny počítače a na každém nastavit úlohu po spuštění.
+<br>
+Na stanici se přihlásíme jako trinity, Klikneme na Tento počítač > Naplánované úlohy > Přidat naplánovanou úlohu > Procházet okolní počítače > server\netlogon\start.bat > Při přihlášení > jako uživatel trinity. 
+<br>
+<center>
+<img src=".\pruvodce_naplanovanou_ulohou.png" alt="pruvodce naplanovanou ulohou" width="441" height="318"></center>
+<p align="justify">
+Obejít všechny počítače je náročné, ale může nás těšit pocit, že to děláme již definitivně naposledy. 
+<br>
+<br>
+Když máme toto všechno hotové, spouští se nám při přihlášení stanice do domény script mount.cmd s právy uživatele a po něm script start.bat s právy administrátora. Systém automatické správy máme zavedený. V tomto okamžiku se nám pouze synchronizuje čas stanice podle serveru. Možnosti využití těchto scriptů v praxi jsou však daleko větší. Můžeme z nich volat další scripty (vbs, js, bat), kterými budeme schopni dělat si se stanicemi Windows téměř vše, co nás napadne. 
+<br>
+<br>
+
+
+
+<b>Příklad instalačního scriptu</b>
+<br>
+Pro názorný příklad si můžeme ukázat instalaci <a href="http://www.sun.com/download/">Java 2 Runtime Environment, SE v1.4.0</a> na všechny stanice Windows v síti. 
+<br>
+Připravíme tzv. tichou instalaci. Na vybraném počítači rozbalíme soubor j2re-1_4_0-win-i.exe. Spustíme setup -r, který nám během instalace vygeneruje silent setup file (setup.iss) do složky Windows. Tento soubor následně zadáme jako parametr pro instalaci. 
+<br>
+<br>
+A zde je script pro hromadnou instalaci, který budeme spouštět z \netlogon\start.bat
+<pre>
+set server=Akira
+set logdir=\\%server%\install\log\Java
+set insdir=\\%server%\install\Win32
+
+if exist %logdir%\%COMPUTERNAME%.SUN_Java.inst.log goto end
+
+  c:
+  mkdir c:\temp\Java
+  xcopy %insdir%\Java\Disk1 c:\temp\Java /d /f  
+  cd \temp\Java\
+  setup.exe -s -f1.\setup.iss -f2%logdir%\%COMPUTERNAME%.SUN_Java.inst.log
+  %insdir%\shutdown /L /R /T:20 /Y /C "Java 2 SE v1.4.0: Install"
+  pause
+
+goto end
+
+:end
+</pre>
+<p align="justify">
+Tento jednoduchý script v prvním kroku zkontroluje, zda-li již byl nebo nebyl spuštěn. Pokud byl spuštěn, jde rovnou na konec. Pokud ještě nebyl spuštěn, provede kopírování souborů ze serveru na lokální disk a samotnou instalaci (více informací najdete na stránkách <a href="http://support.installshield.com/kb/kbresults.asp?pm=All&txtkeyword=Q105472&sm=all+words&txtarticleid=&gv=1&acat=both&sa=content&days=0&submit.x=24&submit.y=11">InstallShield</a>). 
+Během instalace vytvoří log soubor požadovaného jména, který nám slouží mimo jiné ke kontrole (např. grep -i -r -a ResultCode=- ./log) a k zamezení opakovaného spuštění scriptu. Následuje vynucený restart počítače a nezbytná pause, aby script nepokračoval. Při příštím spuštění stejný script již v úvodu zjistí přítomnost log souboru a skokem na end umožní spuštění dalších případných scriptů.
+<br>
+<br>
+<b>Bezpečnost</b>
+<br>
+Je jasné, že při napadení serveru je tento systém zneužitelný. Případný útočník by mohl snadno změnit Vaše startovací scripty a nainstalovat do celé sítě prakticky cokoli. Proto je důležité zajistit patřičná přístupová práva k používaným adresářům a souborům (netlogon a install). Také je správně na místě otázka, jestli je možné celý systém automatické správy vypnout. 
+<br>
+Ano, je to možné. Alespoň co se týče scriptů spouštěných s právy administrátora. Způsobů se jistě najde více. Jedním z nich by mohla být změna UID uživatele trinity. Windows pak trinity nepoznají a scripty neprovedou. Je to relativně elegantní řešení, neboť jen Vy jako správce znáte skutečné UID trinity a můžete ho tak příště, až budete potřebovat, znovu nastavit. Ještě by se dala uvést změna hesla trinity, změna skupiny nebo zrušení uživatele, ale ani jedno z těchto řešení nepovažuji za šťastné.
+<br>
+<br>
+<b>Závěr</b>
+<br>
+Pokud budete tento systém udržovat rozumně a nebudete neuváženě odmazávat logy, můžete dosáhnout stavu, kdy si nově nainstalovaný počítač (např. po havárii) sám při prvním přihlášení do domény nainstaluje veškerý další potřebný software a srovná se tak automaticky s ostatními.
+<br>
+Myslím si, že tento systém je na správu velmi jednoduchý a ušetří administrátorovi hodně práce s obíháním počítačů. V ušetřeném čase se pak můžeme nerušeně věnovat třeba právě Linuxu...
+<br>
+<br>
+Tento systém byl ověřený na Sambě 2.0.7 a WinNT 4.0.
+<br>
+<br>
+<b>Příloha</b>
+<br>
+Netlogon scripty
+<br>
+<br>
+<b>Poděkování</b>
+<br>
+Libor Šmíd a Milan Martinec za inspiraci
+<br>
+Vladislav Čermák, Aleš Sojka, Libor Šmíd za VBS scripty
+<br>
+Radio1 za dobrou hudbu k práci
+<br>
+<a href="http://us1.samba.org/samba/team.html">Týmu programátorů Samby</a> a všem vývojářům Linuxu.
+<br>
+<br>
+<b>Relevantní linky</b>
+<br>
+<a href="http://hufhendr.spok.cz/linux/PDC_Linux.html">Linux jako PDC</a> pro síť Windows NT
+
+</p>
+
+<br>V Praze dne 12.03.2002
+<br>Václav Dvorský
+</font></font></font>
+</td>
+</tr>
+</table>
+</body>
+</html>
+
